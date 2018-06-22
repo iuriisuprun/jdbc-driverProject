@@ -1,5 +1,7 @@
 package com.ua.driver.model;
 
+import java.util.List;
+
 public class Driver {
 
     public static final String ID = "id";
@@ -13,8 +15,13 @@ public class Driver {
     private String lastName;
     private int experience;
     private Category category;
+    private List<Car> cars;
 
     public Driver() {
+    }
+
+    public Driver(int id) {
+        this.id = id;
     }
 
     public Driver(String firstName, String lastName, int experience, Category category) {
@@ -22,6 +29,14 @@ public class Driver {
         this.lastName = lastName;
         this.experience = experience;
         this.category = category;
+    }
+
+    public Driver(String firstName, String lastName, int experience, Category category, List<Car> cars) {
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.experience = experience;
+        this.category = category;
+        this.cars = cars;
     }
 
     public int getId() {
@@ -64,6 +79,14 @@ public class Driver {
         this.category = category;
     }
 
+    public List<Car> getCars() {
+        return cars;
+    }
+
+    public void setCars(List<Car> cars) {
+        this.cars = cars;
+    }
+
     @Override
     public String toString() {
         return "Driver{" +
@@ -71,7 +94,8 @@ public class Driver {
                 ", firstName='" + firstName + '\'' +
                 ", lastName='" + lastName + '\'' +
                 ", experience=" + experience +
-                ", category=" + category +
+                ", category='" + category + '\'' +
+                ", cars=" + cars +
                 '}';
     }
 }

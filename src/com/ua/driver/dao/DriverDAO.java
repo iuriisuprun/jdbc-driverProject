@@ -17,5 +17,9 @@ public interface DriverDAO {
 
     void updateDriver(Driver driver);
 
-    void deleteDriver(int driverId) throws DriverNotFoundException;
+    void deleteDriver(int driverId) throws DriverNotFoundException, WrongIdException;
+
+    Driver findByLastName(String name);
+
+    public void deleteAll();
 }

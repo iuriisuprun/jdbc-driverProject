@@ -4,25 +4,26 @@ import com.ua.driver.dao.DriverDAO;
 import com.ua.driver.exception.DriverNotFoundException;
 import com.ua.driver.exception.DuplicateDriverException;
 import com.ua.driver.exception.WrongIdException;
+import com.ua.driver.model.Car;
 import com.ua.driver.model.Category;
 import com.ua.driver.model.Driver;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 import static com.ua.driver.dao.impl.ConnectionFactory.getInstance;
 
-public class DriverDAOMySQLImpl implements DriverDAO {
+public class DriverDAOH2Impl implements DriverDAO {
 
     private static final String INSERT_DRIVER = String.format("INSERT INTO drivers (%s, %s, %s, %s) VALUES (?, ?, ?, ?);",
             Driver.FIRST_NAME, Driver.LAST_NAME, Driver.EXPERIENCE, Driver.CATEGORY);
-    private static final String GET_ALL_DRIVERS = "SELECT * FROM drivers";
+    private static final String GET_ALL_DRIVERS = "SELECT * FROM drivers" +
+            " INNER JOIN cars ON drivers.id = cars.driver_id;";
     private static final String DELETE_DRIVER_BY_ID = String.format("DELETE FROM drivers WHERE %s=?", Driver.ID);
-    private static final String FIND_DRIVER_BY_ID = String.format("SELECT * FROM drivers WHERE %s=?", Driver.ID);
-    private static final String UPDATE_DRIVER_BY_ID = String.format("UPDATE drivers SET %s=?, %s=?, %s=?, %s=?" +
+    private static final String GET_DRIVER_BY_ID = String.format("SELECT * FROM drivers WHERE %s=?", Driver.ID);
+    private static final String UPDATE_DRIVER = String.format("UPDATE drivers SET %s=?, %s=?, %s=?, %s=?" +
             " WHERE %s=?", Driver.FIRST_NAME, Driver.LAST_NAME, Driver.EXPERIENCE, Driver.CATEGORY, Driver.LAST_NAME);
-    private static final String GET_LAST_NAME = String.format("SELECT * FROM drivers WHERE %s = ?", Driver.LAST_NAME);
+    private static final String CHECK_LAST_NAME = String.format("SELECT * FROM drivers WHERE %s = ?", Driver.LAST_NAME);
     private static final String CLEAN_ALL_DRIVERS = "TRUNCATE TABLE drivers";
 
     private Connection connection;
@@ -30,28 +31,37 @@ public class DriverDAOMySQLImpl implements DriverDAO {
     private Statement stmt = null;
     private ResultSet rs;
 
-    public DriverDAOMySQLImpl() {
-//        createTable();
+    private CarDAOH2Impl carDAO;
+
+    public DriverDAOH2Impl() {
+        carDAO = new CarDAOH2Impl();
     }
 
     @Override
-    public void addDriver(Driver driver) throws DuplicateDriverException {
-        for (Driver temp : getAllDrivers()) {
-            if (temp.getLastName().equals(driver.getLastName())) {
-                throw new DuplicateDriverException();
-            }
-        }
+    public void addDriver(Driver driver) {
         try {
             connection = getInstance().getConnection();
-            pst = connection.prepareStatement(INSERT_DRIVER);
+            pst = connection.prepareStatement(INSERT_DRIVER,
+                    Statement.RETURN_GENERATED_KEYS);
             pst.setString(1, driver.getFirstName());
             pst.setString(2, driver.getLastName());
             pst.setInt(3, driver.getExperience());
             pst.setString(4, driver.getCategory().name());
             pst.execute();
+            rs = pst.getGeneratedKeys();
+            rs.next();
+            Driver newDriver = new Driver(rs.getInt(1));
+            List<Car> cars = driver.getCars();
+            if (driver.getCars() != null){
+                for (int i = 0; i < cars.size(); i++) {
+                    cars.get(i).setDriver(newDriver);
+                    carDAO.addCar(cars.get(i));
+                }
+            }
         } catch (SQLException e) {
             e.printStackTrace();
         } finally {
+            getInstance().closeResultSet(rs);
             getInstance().closePreparedStatement(pst);
             getInstance().closeConnection(connection);
         }
@@ -64,16 +74,35 @@ public class DriverDAOMySQLImpl implements DriverDAO {
             connection = getInstance().getConnection();
             stmt = connection.createStatement();
             rs = stmt.executeQuery(GET_ALL_DRIVERS);
+            Map<Integer, Driver> driverMap = new TreeMap<>();
             while (rs.next()) {
-                Driver driver = new Driver();
-                driver.setId(rs.getInt(Driver.ID));
-                driver.setFirstName(rs.getString(Driver.FIRST_NAME));
-                driver.setLastName(rs.getString(Driver.LAST_NAME));
-                driver.setExperience(rs.getInt(Driver.EXPERIENCE));
-                driver.setCategory(Category.valueOf(rs.getString(Driver.CATEGORY)));
-                result.add(driver);
+                /*for (int i = 1; i < 10; i++) {
+                    System.out.println(rs.getObject(i) + "\t");
+                }
+                System.out.println();*/
+
+                int id = rs.getInt(Driver.ID);
+                Driver driver = driverMap.get(id);
+
+                if (driver == null) {
+                    driver = new Driver();
+                    driver.setId(rs.getInt(Driver.ID));
+                    driver.setFirstName(rs.getString(Driver.FIRST_NAME));
+                    driver.setLastName(rs.getString(Driver.LAST_NAME));
+                    driver.setExperience(rs.getInt(Driver.EXPERIENCE));
+                    driver.setCategory(Category.valueOf(rs.getString(Driver.CATEGORY)));
+                    driver.setCars(new ArrayList<>());
+                    driverMap.put(id, driver);
+                }
+                Car car = new Car();
+                car.setId(rs.getInt(6));
+                car.setMaxSpeed(rs.getDouble(Car.MAX_SPEED));
+                car.setModel(rs.getString(Car.MODEL));
+                car.setYear(rs.getInt(Car.YEAR));
+                driver.getCars().add(car);
             }
-        } catch (SQLException e) {
+            result.addAll(driverMap.values());
+        }catch (SQLException e){
             e.printStackTrace();
         } finally {
             getInstance().closeResultSet(rs);
@@ -84,76 +113,60 @@ public class DriverDAOMySQLImpl implements DriverDAO {
     }
 
     @Override
-    public Driver getDriverById(int driverId) throws WrongIdException {
+    public Driver getDriverById(int driverId) {
         Driver driver = new Driver();
         try {
             connection = getInstance().getConnection();
-            pst = connection.prepareStatement(FIND_DRIVER_BY_ID);
+            pst = connection.prepareStatement(GET_DRIVER_BY_ID);
+//            stmt = connection.createStatement();
             pst.setInt(1, driverId);
-            pst.execute();
             rs = pst.executeQuery();
-            if (rs.next()) {
+
+            while (rs.next()) {
                 driver.setId(rs.getInt(Driver.ID));
                 driver.setFirstName(rs.getString(Driver.FIRST_NAME));
                 driver.setLastName(rs.getString(Driver.LAST_NAME));
                 driver.setExperience(rs.getInt(Driver.EXPERIENCE));
                 driver.setCategory(Category.valueOf(rs.getString(Driver.CATEGORY)));
-            } else {
-                throw new WrongIdException();
             }
-            return driver;
         } catch (SQLException e) {
             e.printStackTrace();
-            return driver;
         } finally {
             getInstance().closeResultSet(rs);
+            getInstance().closePreparedStatement(pst);
+            getInstance().closeConnection(connection);
+        }
+        return driver;
+    }
+
+    @Override
+    public void updateDriver(Driver driver) {
+        try {
+            connection = getInstance().getConnection();
+            pst = connection.prepareStatement(UPDATE_DRIVER);
+            pst.setString(1, driver.getFirstName());
+            pst.setString(2, driver.getLastName());
+            pst.setInt(3, driver.getExperience());
+            pst.setString(4, driver.getCategory().name());
+            pst.setInt(5, driver.getId());
+            pst.execute();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        } finally {
             getInstance().closePreparedStatement(pst);
             getInstance().closeConnection(connection);
         }
     }
 
     @Override
-    public void updateDriver(Driver driver) {
-        int i = 0;
-        for (Driver tempDriver : getAllDrivers()) {
-            if (tempDriver.getLastName().equals(driver.getLastName())) {
-                try {
-                    connection = getInstance().getConnection();
-                    pst = connection.prepareStatement(UPDATE_DRIVER_BY_ID);
-                    pst.setString(1, driver.getFirstName());
-                    pst.setString(2, driver.getLastName());
-                    pst.setInt(3, driver.getExperience());
-                    pst.setString(4, driver.getCategory().toString());
-                    pst.setString(5, driver.getLastName());
-                    int rowsUpdated = pst.executeUpdate();
-                    if (rowsUpdated > 0) {
-                        System.out.println("An existing driver was updated successfully!");
-                    }
-                    i = 1;
-                } catch (SQLException e) {
-                    e.printStackTrace();
-                } finally {
-                    getInstance().closePreparedStatement(pst);
-                    getInstance().closeConnection(connection);
-                }
-            }
-        }
-        if (i == 0) {
-            try {
-                addDriver(driver);
-            } catch (DuplicateDriverException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
-    @Override
-    public void deleteDriver(int driverId) throws DriverNotFoundException {
+    public void deleteDriver(int driverId) throws DriverNotFoundException, WrongIdException {
         try {
+            if (driverId < 1) {
+                throw new WrongIdException();
+            }
             connection = getInstance().getConnection();
             pst = connection.prepareStatement(DELETE_DRIVER_BY_ID);
             pst.setInt(1, driverId);
-            pst.execute();
             int result = pst.executeUpdate();
             if (result == 0) {
                 throw new DriverNotFoundException();
@@ -161,30 +174,31 @@ public class DriverDAOMySQLImpl implements DriverDAO {
         } catch (SQLException e) {
             e.printStackTrace();
         } finally {
-            getInstance().closePreparedStatement(pst);
             getInstance().closeConnection(connection);
+            getInstance().closePreparedStatement(pst);
         }
     }
 
-   /* private void createTable() {
+    @Override
+    public void deleteAll() {
         try {
             connection = getInstance().getConnection();
             stmt = connection.createStatement();
-            stmt.executeUpdate(CREATE_DRIVER_TABLE);
+            stmt.executeUpdate(CLEAN_ALL_DRIVERS);
         } catch (SQLException e) {
             e.printStackTrace();
         } finally {
             getInstance().closeStatement(stmt);
             getInstance().closeConnection(connection);
         }
-    }*/
+    }
 
     @Override
     public Driver findByLastName(String name) {
         Driver driver = new Driver();
         try {
             connection = getInstance().getConnection();
-            pst = connection.prepareStatement(GET_LAST_NAME);
+            pst = connection.prepareStatement(CHECK_LAST_NAME);
             pst.setString(1, name);
             rs = pst.executeQuery();
             while (rs.next()) {
@@ -204,17 +218,16 @@ public class DriverDAOMySQLImpl implements DriverDAO {
         return driver;
     }
 
-    @Override
-    public void deleteAll() {
-        try {
-            connection = getInstance().getConnection();
-            stmt = connection.createStatement();
-            stmt.executeUpdate(CLEAN_ALL_DRIVERS);
-        } catch (SQLException e) {
-            e.printStackTrace();
-        } finally {
-            getInstance().closeStatement(stmt);
-            getInstance().closeConnection(connection);
-        }
-    }
+//    private void createTableIfNotExists(){
+//        try {
+//            connection = getInstance().getConnection();
+//            stmt = connection.createStatement();
+//            stmt.executeUpdate(CREATE_DRIVER_TABLE);
+//        } catch (SQLException e) {
+//            e.printStackTrace();
+//        }finally {
+//            getInstance().closeStatement(stmt);
+//            getInstance().closeConnection(connection);
+//        }
+//    }
 }

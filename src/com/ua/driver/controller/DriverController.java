@@ -1,5 +1,7 @@
 package com.ua.driver.controller;
 
+import com.ua.driver.dao.DriverDAO;
+import com.ua.driver.dao.impl.DriverDAOH2Impl;
 import com.ua.driver.exception.DriverNotFoundException;
 import com.ua.driver.exception.DuplicateDriverException;
 import com.ua.driver.exception.WrongIdException;
@@ -7,6 +9,7 @@ import com.ua.driver.model.Category;
 import com.ua.driver.model.Driver;
 import com.ua.driver.service.DriverService;
 
+import java.util.List;
 import java.util.Scanner;
 
 public class DriverController {
@@ -77,7 +80,6 @@ public class DriverController {
         int experience = scanner.nextInt();
         System.out.println("Enter category: ");
         String category = scanner.next();
-
         driver.setFirstName(firstName);
         driver.setLastName(lastName);
         driver.setExperience(experience);
@@ -105,33 +107,25 @@ public class DriverController {
     }
 
     private void updateDriver() {
+        Scanner scanner = new Scanner(System.in);
+        DriverDAO driverDAO = new DriverDAOH2Impl();
+        System.out.println("Enter the driver for updating");
         getAllDrivers();
-        System.out.println("Enter id of a driver for updating:");
-        int id = scanner.nextInt();
-        try {
-            for (Driver driver : driverService.getAllDrivers()) {
-                if (driver.getId() == id){
-                    System.out.println("Enter new first name:");
-                    String firstName = scanner.next();
-                    System.out.println("Enter new last name:");
-                    String lastName = scanner.next();
-                    System.out.println("Enter new experience:");
-                    int experience = scanner.nextInt();
-                    System.out.println("Enter new category:");
-                    String category = scanner.next();
-                    driver.setFirstName(firstName);
-                    driver.setLastName(lastName);
-                    driver.setExperience(experience);
-                    driver.setCategory(Category.valueOf(category));
-                    driverService.updateDriver(driverService.getDriverById(id));
-                }
-            }
-        } catch (WrongIdException e) {
-            System.err.println("Wrong id!");
-        }
+        int n = scanner.nextInt() - 1;
+        Driver driver = driverDAO.getAllDrivers().get(n);
+        System.out.println("Enter firstName: ");
+        driver.setFirstName(scanner.next());
+        System.out.println("Enter lastName: ");
+        driver.setLastName(scanner.next());
+        checkToDuplicate(driver);
+        System.out.println("Enter experience: ");
+        driver.setExperience(scanner.nextInt());
+        System.out.println("Enter category: ");
+        driver.setCategory(Category.valueOf(scanner.next()));
+        driverDAO.updateDriver(driver);
     }
 
-    private void deleteDriver() {
+    /*private void deleteDriver() {
         System.out.println("Enter id of a driver for deleting:");
         int id = scanner.nextInt();
         try {
@@ -139,12 +133,40 @@ public class DriverController {
         } catch (DriverNotFoundException e) {
             System.err.println("Wrong id!");
         }
-    }
+    }*/
 
     private void showHelloMessage() {
         System.out.println("*********************");
         System.out.println("**    Driver DB    **");
         System.out.println("*********************");
         System.out.println();
+    }
+
+    private void checkToDuplicate(Driver driver) {
+        if (driverService.findByLastName(driver.getLastName()).getLastName() != null) {
+            try {
+                throw new DuplicateDriverException();
+            } catch (DuplicateDriverException e) {
+                System.err.println("Duplicate driver!");
+                doWork();
+            }
+        }
+    }
+
+    private void deleteDriver() {
+        Scanner sc = new Scanner(System.in);
+        System.out.println("Enter id of driver for deleting:");
+        Driver driver;
+        int number = sc.nextInt() - 1;
+        List<Driver> drivers = driverService.getAllDrivers();
+        driver = drivers.get(number);
+        try {
+            driverService.deleteDriver(driver.getId());
+        } catch (DriverNotFoundException e) {
+            e.printStackTrace();
+        } catch (WrongIdException e) {
+            e.printStackTrace();
+        }
+
     }
 }

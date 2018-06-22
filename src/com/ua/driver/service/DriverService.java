@@ -36,7 +36,11 @@ public class DriverService {
         driverDAO.updateDriver(driver);
     }
 
-    public void deleteDriver(int driverId) throws DriverNotFoundException {
+    public void deleteDriver(int driverId) throws DriverNotFoundException, WrongIdException {
         driverDAO.deleteDriver(driverId);
+    }
+
+    public Driver findByLastName(String name){
+        return driverDAO.findByLastName(name);
     }
 }
